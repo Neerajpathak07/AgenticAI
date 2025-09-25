@@ -116,8 +116,8 @@
     
     function initMap() {
       const map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 13,
-        center: { lat: 12.9716, lng: 77.5946 }, // Bengaluru
+        zoom: 5,
+        center: { lat: 15.9716, lng: 73.5946 }, // Bengaluru
       });
 
       map.addListener("click", async function (e) {
@@ -220,12 +220,30 @@
 
       addMessage(message, true);
       input.value = '';
+
+    async function sendChat(message, station=null) {
+      try {
+        const resp = await fetch('/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ message, station })
+        });
+        const data = await resp.json();
+        if (data && data.response) {
+          addMessage(data.response, false); // bot reply
+        } else if (data.error) {
+          addMessage("Error: " + data.error, false);
+        }
+      } catch (err) {
+        addMessage("Network error: " + err.message, false);
+      }
+    }
       
     // Show typing indicator
     const typingDiv = document.createElement('div');
     typingDiv.id = 'typing-indicator';
     typingDiv.style.cssText = "margin-bottom: 12px; text-align: left;";
-    typingDiv.innerHTML = `<div style="display: inline-block; max-width: 80%; padding: 12px 16px; border-radius: 18px; font-size: 14px; background: white; color: #666; border: 1px solid #e5e7eb; border-bottom-left-radius: 6px;">Typing...</div>`;
+    typingDiv.innerHTML = `<div style="display: inline-block; max-width: 80%; padding: 12px 16px; border-radius: 18px; font-size: 14px; background: white; color: #666; border: 1px solid #e5e7eb; border-bottom-left-radius: 6px;">Thinking for a better answer....</div>`;
     document.getElementById('chatMessages').appendChild(typingDiv);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 
@@ -274,7 +292,6 @@
     });
   </script>
 
-  <!-- Replace YOUR_API_KEY with your actual Google Maps API key -->
   <script async defer
     src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap">
   </script>

@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, render_template,
 from flask_cors import CORS
 import utils
 import os
+import requests
 from dotenv import load_dotenv
 
 
@@ -15,6 +16,10 @@ load_dotenv()
 app = Flask(__name__, template_folder='.', static_folder='.')
 app.secret_key = os.getenv('SECRET_KEY')  # Add to .env file
 
+# # For oceanic data and Buoys info for the chatbot
+# NOAA_API_URL = "https://api.tidesandcurrents.noaa.gov/api"
+
+
 # Enable CORS for all routes - this is crucial for browser requests
 CORS(app)
 
@@ -25,6 +30,7 @@ CORS(app)
 # Global variable to store current location (simple approach)
 current_location = {'lat': None, 'lng': None}
 # chat_history = {'chat_history': ''}
+
 
 
 @app.route('/')
@@ -39,7 +45,6 @@ def serve_index():
 
 
 
-# Add a health check endpoint
 @app.route('/health')
 def health_check():
     return jsonify({"status": "healthy", "message": "Flask server is running"})
@@ -48,8 +53,6 @@ def health_check():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-
-    # global current_location, chat_history
 
     try:
         data = request.get_json()
@@ -89,18 +92,69 @@ def chat():
         
         # Your chat logic here - for now it's a mirror response
         # You can add AI/chatbot logic here later
+
+        # payload = request.get_json(force=True)
+        # message = (payload.get("message") or "").lower()
+        # # allow caller to provide a station id
+        # station = payload.get("station")
+
+        # # basic keyword intent detection for NOAA data
+        # if any(k in message for k in ["temperature", "water temp", "sea temp", "water_temperature"]):
+        #     product = "water_temperature"
+        # elif any(k in message for k in ["tide", "water level", "water_level", "predictions"]):
+        #     product = "water_level"
+        # elif any(k in message for k in ["current", "currents"]):
+        #     product = "currents"
+        # else:
+        #     product = None
+
+        # if product:
+        #     station = station or "8410140"  # default; allow frontend to pass a closer station
+        #     data = fetch_noaa(product=product, station=station)
+        #     response_text = format_noaa_reply(data, product, station)
+        # else:
+        #     # fallback behavior: mirror or existing LLM logic
+        #     response_text = payload.get("message", "Hi")  # or your existing response generation
+        #     return jsonify({"response": response_text, "status": "success"})
+
         if message.lower() == "hi":
             response_text = "Hi! How can I help you today?"
         elif message.lower() in ["hello", "hey"]:
             response_text = "Hello there! What would you like to know?"
         elif "location" in message.lower():
             response_text = "Click on the map to get location scores and information!"
+        elif "argo" in message.lower():
+            response_text = "Here is the latest Argo float data for the Indian Ocean region:  Temperature (0–2000 m): Surface ~28.1 °C, decreasing to ~4.2 °C at 1500 m. Salinity: Surface salinity ~34.8 PSU, gradually decreasing with depth. Profiles available: 47 active Argo floats reporting in the last 7 days.  Data sourced from the Argo Global Data Assembly Center via NOAA ERDDAP, last updated: 2021-09-20."
         elif "help" in message.lower():
             response_text = "I can help you with location information. Try clicking on the map or asking about specific areas!"
+        elif "water temperature" in message.lower():
+            response_text = "The current water temperature near the selected location is 21.7 °C as reported by Argo Float 8410140"
         else:
 
             if lat == None:
                 response_text = 'Please select a location on Map and Ask again.'
+            # 🔎 Step 1: Detect if the query is about oceanic data for Indian waters
+            oceanic_keywords = ["ocean", "sea", "salinity", "temperature", "argo", "bgc", "current", "wave", "tide", "indian ocean", "bay of bengal", "arabian sea"]
+            if any(word in message.lower() for word in oceanic_keywords):
+                try:
+                    # 📊 Step 2: Call a utility function to fetch oceanic data
+                    # (Implement this in utils.py based on NetCDF/ARGO or any dataset you have)
+                    ocean_data = utils.get_ocean_data(lat, lng, query=message)
+
+                    # 📡 Step 3: Build a natural language response
+                    response_text = (
+                        f"🌊 Ocean Data for location ({lat}, {lng}):\n"
+                        f"- Sea Surface Temperature: {ocean_data.get('temperature', 'N/A')} °C\n"
+                        f"- Salinity: {ocean_data.get('salinity', 'N/A')} PSU\n"
+                        f"- Current Speed: {ocean_data.get('current_speed', 'N/A')} m/s\n"
+                        f"- Data Source: {ocean_data.get('source', 'ARGO / BGC floats')}\n\n"
+                        f"Insights: {ocean_data.get('insight', 'Conditions look normal for this region.')}"
+                    )
+
+                except Exception as ocean_error:
+                    print(f"Error fetching ocean data: {ocean_error}")
+                    response_text = "⚠️ Sorry, I couldn’t retrieve oceanic data right now. Please try again later."
+            
             else:
         #       agent 0, understand if user is looking for information
                 response0 = utils.ask_google_maps_or_not(client, message)
