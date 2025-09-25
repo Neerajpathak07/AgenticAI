@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 
 from google import genai
-# api_key = os.getenv('google_llm_api')
-client = genai.Client()
+api_key = os.getenv("google_llm_api")
+client = genai.Client(api_key=api_key)
 
 # Load environment variables
 load_dotenv()

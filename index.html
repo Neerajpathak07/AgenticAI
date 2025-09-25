@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
   <title>Click Map to Send Coordinates</title>
   <meta charset="utf-8">
   <!-- <link rel="stylesheet" href="/style.css"> -->
@@ -114,62 +115,213 @@
     const FLASK_URL = "{{ flask_url }}";
 
     
-    function initMap() {
-      const map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 5,
-        center: { lat: 15.9716, lng: 73.5946 }, // Bengaluru
+function initMap() {
+  google.charts.load('current', {'packages':['corechart']}); // load Google Charts once
+
+  const map = new google.maps.Map(document.getElementById("map"), {
+    zoom: 5,
+    center: { lat: 12.5, lng: 80.0 },
+  });
+
+  // ==============================
+  // Legend for marker colors (Bottom-Left)
+  // ==============================
+  const legendDiv = document.createElement('div');
+  legendDiv.style.background = 'white';
+  legendDiv.style.padding = '10px';
+  legendDiv.style.margin = '10px';
+  legendDiv.style.border = '1px solid #ccc';
+  legendDiv.style.borderRadius = '5px';
+  legendDiv.style.fontFamily = 'Arial, sans-serif';
+  legendDiv.innerHTML = `
+    <b>Buoy Status Legend</b><br>
+    <span style="color:green;">● Active</span><br>
+    <span style="color:orange;">● Active (OMNI)</span><br>
+    <span style="color:red;">● Inactive (OMNI)</span>
+  `;
+  map.controls[google.maps.ControlPosition.BOTTOM_LEFT].push(legendDiv);
+
+  // ==============================
+  // 1. Define buoy dataset
+  // ==============================
+  const buoys = [
+    { id: "AD06", lat: 18.283661, lng: 67.221405, status: "Active (OMNI)" },
+    { id: "AD08", lat: 12.159192, lng: 67.933792, status: "Active (OMNI)" },
+    { id: "CB02", lat: 10.87912,  lng: 72.21461, status: "Active" },
+    { id: "CALVAL", lat: 10.49902, lng: 72.20533, status: "Active" },
+    { id: "AD10", lat: 10.322393, lng: 72.597847, status: "Inactive (OMNI)" },
+    { id: "BD11", lat: 13.468, lng: 84.115, status: "Inactive (OMNI)" },
+    { id: "BD13", lat: 13.998627, lng: 87.032043, status: "Active (OMNI)" },
+    { id: "BD10", lat: 16.328911, lng: 88.00573, status: "Active (OMNI)" },
+    { id: "BD14", lat: 6.583954, lng: 88.398712, status: "Active (OMNI)" },
+    { id: "CB01", lat: 11.589352, lng: 92.595444, status: "Active" },
+    { id: "BD12", lat: 10.550171, lng: 94.044556, status: "Active (OMNI)" }
+  ];
+
+  // Dummy data
+  const dummyData = {
+    salinity: [35, 36, 34, 35, 36, 37],
+    temperature: [28, 29, 27, 28, 30, 31],
+    humidity: [70, 72, 68, 71, 69, 73],
+    waveHeight: [1.2, 1.5, 1.1, 1.3, 1.6, 1.4],
+    windSpeed: [5, 6, 5.5, 6.2, 5.8, 6.0],
+    currentSpeed: [0.5, 0.6, 0.4, 0.7, 0.6, 0.5]
+  };
+
+  // ==============================
+  // 2. Add buoy markers with charts
+  // ==============================
+  buoys.forEach(buoy => {
+    // Color-coded markers
+    let iconColor = "red";
+    if(buoy.status === "Active") iconColor = "green";
+    else if(buoy.status === "Active (OMNI)") iconColor = "orange";
+
+    const marker = new google.maps.Marker({
+      position: { lat: buoy.lat, lng: buoy.lng },
+      map: map,
+      title: buoy.id,
+      icon: {
+        url: `http://maps.google.com/mapfiles/ms/icons/${iconColor}-dot.png`,
+        scaledSize: new google.maps.Size(20, 20)
+      }
+    });
+
+    const infoContent = `
+      <div style="width: 300px; font-family: Arial, sans-serif;">
+        <h3>Buoy ID: ${buoy.id}</h3>
+        <p><b>Status:</b> ${buoy.status}</p>
+        <p><b>Lat:</b> ${buoy.lat}<br><b>Lng:</b> ${buoy.lng}</p>
+        <label for="paramSelect-${buoy.id}">Parameter:</label>
+        <select id="paramSelect-${buoy.id}" style="margin-bottom:10px;">
+          <option value="salinity">Salinity</option>
+          <option value="temperature">Temperature</option>
+          <option value="humidity">Humidity</option>
+          <option value="waveHeight">Wave Height</option>
+          <option value="windSpeed">Wind Speed</option>
+          <option value="currentSpeed">Current Speed</option>
+        </select>
+        <div id="chart-${buoy.id}" style="width: 100%; height: 220px;"></div>
+        <div id="summary-${buoy.id}" style="margin-top:5px; font-size:13px; color:#555;"></div>
+      </div>
+    `;
+
+    const infoWindow = new google.maps.InfoWindow({ content: infoContent });
+
+    marker.addListener("click", () => {
+      infoWindow.open(map, marker);
+      setTimeout(() => {
+        drawChart(buoy.id, 'salinity');
+        const dropdown = document.getElementById(`paramSelect-${buoy.id}`);
+        dropdown.addEventListener('change', (e) => drawChart(buoy.id, e.target.value));
+      }, 200);
+    });
+  });
+
+  // ==============================
+  // 3. Click-to-send-coordinates
+  // ==============================
+  map.addListener("click", async function (e) {
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    const resultDiv = document.getElementById("result");
+    resultDiv.innerHTML = `Sending coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}...`;
+
+    try {
+      const response = await fetch("http://localhost:5000/process-coordinates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lng }),
       });
-
-      map.addListener("click", async function (e) {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        
-        document.getElementById("result").innerHTML = "Processing...";
-
-        const resultDiv = document.getElementById("result");
-        resultDiv.innerHTML = `Sending coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}...`;
-
-        try {
-          // Send to Flask
-          const response = await fetch("http://localhost:5000/process-coordinates", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ lat, lng }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          } 
-
-          const data = await response.json();
-          resultDiv.innerHTML = `<span class="success">${data.message}</span>`;
-
-          let scoresHtml = '<h3>Location Scores:</h3>';
-            if (data.scores && data.names) {
-                for (const [key, value] of Object.entries(data.scores)) {
-                const stars = '★'.repeat(Math.max(0, Math.min(5, value))); // Limit to 5 stars
-                const emptyStars = '☆'.repeat(5 - Math.max(0, Math.min(5, value)));
-                // Show name of highest-rated place for this parameter
-                const sourceName = data.names[key] || '';
-                scoresHtml += `<div class="score-item" style="display:flex;align-items:center;gap:4px;margin-bottom:8px;">
-                    <span class="score-label" style="min-width:120px;font-size:16px;font-weight:500;color:#222;">${key}:</span>
-                    <span class="stars">${stars}${emptyStars}</span>
-                    <span class="score-value" style="font-size:16px;font-weight:500;color:#222;margin-left:4px;">(${value})</span>
-                    <span class="score-source" style="color:#764ba2;font-weight:600;margin-left:8px;">${sourceName}</span>
-                </div>`;
-                }
-            } 
-
-            document.getElementById("result").innerHTML = scoresHtml;
-
-        } catch (error) {
-          console.error('Error:', error);
-          resultDiv.innerHTML = `<span class="error">Error: ${error.message}</span>`;
-        }
-      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      resultDiv.innerHTML = `<span class="success">${data.message}</span>`;
+    } catch (error) {
+      console.error('Error:', error);
+      resultDiv.innerHTML = `<span class="error">Error: ${error.message}</span>`;
     }
+  });
+
+  // ==============================
+  // 4. Enhanced chart drawing with axes & values
+function drawChart(buoyId, parameter) {
+  google.charts.setOnLoadCallback(() => {
+    const values = dummyData[parameter];
+    const dataArray = [['Time', parameter]];
+    values.forEach((val, idx) => dataArray.push([`T${idx+1}`, val]));
+    const data = google.visualization.arrayToDataTable(dataArray);
+
+    const min = Math.floor(Math.min(...values) - 1);
+    const max = Math.ceil(Math.max(...values) + 1);
+
+    const options = {
+      title: parameter.charAt(0).toUpperCase() + parameter.slice(1) + ' over time',
+      legend: { position: 'bottom' },
+      curveType: 'function',
+      pointSize: 5,
+      hAxis: {
+        title: 'Time Step',
+        titleTextStyle: { fontSize: 14 },
+        textStyle: { fontSize: 12 },
+        textPosition: 'out', // ensures labels show
+        gridlines: { count: values.length }
+      },
+      vAxis: {
+        title: parameterUnit(parameter),
+        titleTextStyle: { fontSize: 14 },
+        textStyle: { fontSize: 12 },
+        textPosition: 'out', // ensures numbers show
+        viewWindow: { min: min, max: max },
+        gridlines: { count: 6 }
+      },
+      colors: [parameterColor(parameter)],
+      height: 220,
+      chartArea: { width: '90%', height: '70%' }
+    };
+
+    const chartDiv = document.getElementById(`chart-${buoyId}`);
+    if (chartDiv) {
+      const chart = new google.visualization.LineChart(chartDiv);
+      chart.draw(data, options);
+
+      // Display min/max/avg
+      const avg = (values.reduce((a,b)=>a+b,0)/values.length).toFixed(2);
+      const summaryDiv = document.getElementById(`summary-${buoyId}`);
+      if(summaryDiv) summaryDiv.innerHTML = `<b>Min:</b> ${Math.min(...values)} ${parameterUnit(parameter)} | <b>Max:</b> ${Math.max(...values)} ${parameterUnit(parameter)} | <b>Avg:</b> ${avg} ${parameterUnit(parameter)}`;
+    }
+  });
+}
+
+
+
+  function parameterUnit(param) {
+    switch(param){
+      case 'temperature': return '°C';
+      case 'salinity': return 'PSU';
+      case 'humidity': return '%';
+      case 'waveHeight': return 'm';
+      case 'windSpeed': return 'm/s';
+      case 'currentSpeed': return 'm/s';
+      default: return '';
+    }
+  }
+
+  function parameterColor(param){
+    switch(param){
+      case 'temperature': return '#FF5722';
+      case 'salinity': return '#2196F3';
+      case 'humidity': return '#4CAF50';
+      case 'waveHeight': return '#03A9F4';
+      case 'windSpeed': return '#FFC107';
+      case 'currentSpeed': return '#9C27B0';
+      default: return '#000';
+    }
+  }
+}
+
+
+
+
 
     function addMessage(message, isUser = false) {
       const chatMessages = document.getElementById('chatMessages');
