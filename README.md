@@ -1,4 +1,4 @@
-# AgenticAI: Location Intelligence & Chat Assistant
+# CityPulse AI: Location Intelligence & Chat Assistant
 
 ## Overview
 AgenticAI is a web application that combines interactive map-based location scoring with a modern chat assistant. Users can click on a map to receive detailed scores for various location parameters (Safety, Connectivity, Rental Availability, etc.), powered by Google Maps data and custom Python logic. The chat sidebar provides instant, mirrored responses and can answer location-based queries using AI.
